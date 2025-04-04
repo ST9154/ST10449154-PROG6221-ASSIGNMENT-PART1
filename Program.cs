@@ -5,7 +5,7 @@ using System.Text;
 
 class Program
 {
-    private static string userName = "";
+    private static string userName = ""; 
     private static readonly Random random = new Random();
 
     static void Main(string[] args)
@@ -15,7 +15,7 @@ class Program
         DisplayAsciiArt();
         PlayWelcomeGreeting();
         GetUserName();
-        RunChatLoop();
+        RunChatLoop(); 
     }
 
     static void PlayWelcomeGreeting()
@@ -118,16 +118,49 @@ class Program
                 Environment.Exit(0);
             }
 
-          
+            string response = GetResponse(input);
             Console.ForegroundColor = ConsoleColor.Cyan;
             Console.Write("[Bot] ");
             Console.ForegroundColor = ConsoleColor.White;
             Console.Write("» ");
+            TypeWriteEffect(response + "\n", 10);
             Console.ResetColor();
         }
     }
 
-   
+    static string GetResponse(string input)
+    {
+        input = input.ToLower();
+
+        if (input.Contains("how are you"))
+        {
+            return "I'm functioning optimally, thank you for asking! How about you?";
+        }
+        else if (input.Contains("purpose") || input.Contains("what do you do"))
+        {
+            return "My purpose is to help you stay safe online by providing cybersecurity awareness information.";
+        }
+        else if (input.Contains("password") || input.Contains("strong password"))
+        {
+            return "🔒 Strong passwords should:\n- Be at least 12 characters long\n- Include uppercase, lowercase, numbers and symbols\n- Not contain personal information\n- Be unique for each account\n- Consider using a password manager!";
+        }
+        else if (input.Contains("phishing") || input.Contains("fake email"))
+        {
+            return "🚩 Watch for these phishing signs:\n1. Urgent or threatening language\n2. Requests for personal information\n3. Suspicious sender addresses\n4. Poor spelling/grammar\n5. Unexpected attachments\n6. Links that don't match the displayed text";
+        }
+        else if (input.Contains("browsing") || input.Contains("safe internet"))
+        {
+            return "🌐 Safe browsing tips:\n- Look for 🔐 HTTPS in URLs\n- Don't download from untrusted sites\n- Keep browser/plugins updated\n- Use ad-blockers\n- Avoid public WiFi for sensitive tasks\n- Enable two-factor authentication";
+        }
+        else if (input.Contains("help") || input.Contains("what can i ask"))
+        {
+            return "You can ask me about:\n- 🔒 Password security\n- 🚩 Phishing scams\n- 🌐 Safe browsing\n- 🛡️ General cybersecurity tips\n- ℹ️ My purpose";
+        }
+        else
+        {
+            return "I didn't quite understand that. Try asking about:\n- 'password safety'\n- 'phishing emails'\n- 'safe browsing'\nOr type 'help' for options.";
+        }
+    }
 
     #region UI Enhancement Methods
     static void TypeWriteEffect(string text, int delay = 30)
