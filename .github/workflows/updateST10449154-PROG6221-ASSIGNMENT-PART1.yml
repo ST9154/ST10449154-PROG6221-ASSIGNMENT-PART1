@@ -1,0 +1,58 @@
+name: CI/CD Pipeline for Cybersecurity Chatbot
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  DOTNET_VERSION: '6.0.x'  # LTS version
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: windows-latest  # Required for SoundPlayer (Windows-only)
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build
+      run: dotnet build --configuration Release --no-restore
+
+    - name: Run tests
+      run: dotnet test --no-build --verbosity normal
+
+  deploy:
+    name: Deploy Executable
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main'  # Only deploy on main branch
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Publish standalone executable
+      run: |
+        dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o ./publish
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: CybersecurityChatbot
+        path: ./publish
