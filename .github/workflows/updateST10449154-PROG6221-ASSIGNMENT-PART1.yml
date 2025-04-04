@@ -12,7 +12,8 @@ env:
 jobs:
   build-and-test:
     name: Build and Test
-    runs-on: windows-latest  # Required for SoundPlayer (Windows-only)
+    runs-on: windows-latest
+    timeout-minutes: 10  # Prevent hanging
 
     steps:
     - name: Checkout code
@@ -23,36 +24,64 @@ jobs:
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
 
+    - name: List project files (Debugging)
+      run: dir /s /b *.csproj || ls -R *.csproj  # Windows/Unix cross-command
+
     - name: Restore dependencies
       run: dotnet restore
+      continue-on-error: false
 
-    - name: Build
-      run: dotnet build --configuration Release --no-restore
+    - name: Build with diagnostics
+      run: |
+        dotnet build --configuration Release --no-restore -v diag > build.log
+        type build.log  # Windows (use 'cat' for Linux)
+      shell: cmd
 
     - name: Run tests
-      run: dotnet test --no-build --verbosity normal
+      run: dotnet test --no-build --verbosity normal --logger "console;verbosity=detailed"
+
+    - name: Upload build logs (on failure)
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-logs
+        path: |
+          build.log
+          **/TestResults/*.xml
 
   deploy:
     name: Deploy Executable
     needs: build-and-test
-    if: github.ref == 'refs/heads/main'  # Only deploy on main branch
+    if: github.ref == 'refs/heads/main'
     runs-on: windows-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+    - uses: actions/checkout@v3
 
     - name: Setup .NET
       uses: actions/setup-dotnet@v3
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
 
-    - name: Publish standalone executable
+    - name: Publish with retry
       run: |
-        dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o ./publish
+        $maxRetries = 3
+        $retryCount = 0
+        do {
+          try {
+            dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o ./publish
+            break
+          } catch {
+            $retryCount++
+            if ($retryCount -ge $maxRetries) { exit 1 }
+            Start-Sleep -Seconds 5
+          }
+        } while ($true)
+      shell: pwsh
 
     - name: Upload artifact
       uses: actions/upload-artifact@v3
       with:
         name: CybersecurityChatbot
         path: ./publish
+        retention-days: 7
