@@ -1,4 +1,4 @@
-name: CI/CD Pipeline for Cybersecurity Chatbot
+name: Cybersecurity Chatbot CI/CD
 
 on:
   push:
@@ -7,47 +7,64 @@ on:
     branches: [ main ]
 
 env:
-  DOTNET_VERSION: '6.0.x'  # LTS version
+  DOTNET_VERSION: '6.0.x'
+  BUILD_CONFIG: 'Release'
 
 jobs:
+  validate-environment:
+    name: Validate Environment
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Verify Project Structure
+        run: |
+          if [ ! -f *.csproj ]; then
+            echo "::error::No .csproj file found in root directory"
+            exit 1
+          fi
+          echo "Project structure OK"
+
   build-and-test:
     name: Build and Test
+    needs: validate-environment
     runs-on: windows-latest
-    timeout-minutes: 10  # Prevent hanging
+    timeout-minutes: 5
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v3
-      with:
-        dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
 
-    - name: List project files (Debugging)
-      run: dir /s /b *.csproj || ls -R *.csproj  # Windows/Unix cross-command
+      - name: Restore Packages (with retry)
+        run: |
+          $retryCount = 0
+          $maxRetries = 3
+          do {
+            try {
+              dotnet restore
+              break
+            } catch {
+              $retryCount++
+              if ($retryCount -ge $maxRetries) { exit 1 }
+              Start-Sleep -Seconds 5
+            }
+          } while ($true)
+        shell: pwsh
 
-    - name: Restore dependencies
-      run: dotnet restore
-      continue-on-error: false
+      - name: Build Solution
+        run: dotnet build --configuration ${{ env.BUILD_CONFIG }} --no-restore -p:Platform="x64"
 
-    - name: Build with diagnostics
-      run: |
-        dotnet build --configuration Release --no-restore -v diag > build.log
-        type build.log  # Windows (use 'cat' for Linux)
-      shell: cmd
+      - name: Run Tests
+        run: dotnet test --no-build --verbosity normal
 
-    - name: Run tests
-      run: dotnet test --no-build --verbosity normal --logger "console;verbosity=detailed"
-
-    - name: Upload build logs (on failure)
-      if: failure()
-      uses: actions/upload-artifact@v3
-      with:
-        name: build-logs
-        path: |
-          build.log
-          **/TestResults/*.xml
+      - name: Check Audio Compatibility
+        if: runner.os != 'Windows'
+        run: |
+          echo "::warning::SoundPlayer only works on Windows. Audio features will be disabled."
+          # Add your cross-platform fallback here
 
   deploy:
     name: Deploy Executable
@@ -56,32 +73,22 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
+      - uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v3
-      with:
-        dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Publish Single File
+        run: |
+          dotnet publish -c ${{ env.BUILD_CONFIG }} -r win-x64 \
+          --self-contained true \
+          -p:PublishSingleFile=true \
+          -p:IncludeNativeLibrariesForSelfExtract=true \
+          -o ./publish
 
-    - name: Publish with retry
-      run: |
-        $maxRetries = 3
-        $retryCount = 0
-        do {
-          try {
-            dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o ./publish
-            break
-          } catch {
-            $retryCount++
-            if ($retryCount -ge $maxRetries) { exit 1 }
-            Start-Sleep -Seconds 5
-          }
-        } while ($true)
-      shell: pwsh
-
-    - name: Upload artifact
-      uses: actions/upload-artifact@v3
-      with:
-        name: CybersecurityChatbot
-        path: ./publish
-        retention-days: 7
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: chatbot-executable
+          path: ./publish
+          retention-days: 3
